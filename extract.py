@@ -32,8 +32,20 @@ SCOPES = [
 
 
 def get_client():
-    creds_path = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "service_account.json")
-    creds = Credentials.from_service_account_file(creds_path, scopes=SCOPES)
+    import json
+    from google.oauth2.service_account import Credentials
+
+    # Prefer JSON content from environment variable (best for Cloud Agents)
+    sa_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    
+    if sa_json:
+        info = json.loads(sa_json)
+        creds = Credentials.from_service_account_info(info, scopes=SCOPES)
+    else:
+        # Fallback to file (for local testing)
+        creds_path = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "service_account.json")
+        creds = Credentials.from_service_account_file(creds_path, scopes=SCOPES)
+    
     return gspread.authorize(creds)
 
 
