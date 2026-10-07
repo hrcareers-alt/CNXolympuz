@@ -5,6 +5,7 @@ extract.py – Extract candidates that still need CNX upload.
 
 import os
 import json
+import re
 import argparse
 from datetime import datetime
 from pathlib import Path
@@ -103,6 +104,69 @@ def clean_email(email: str) -> str:
     return email
 
 
+# Work-setup answers are not part of an applicant's name. "Personal Details" on the
+# Modern Traction / Jobstreet form is the first name. "Full Name" on that form is a
+# character reference, or the work-setup answer when the columns are shifted.
+_WORK_SETUP_RE = re.compile(
+    r"work\s*from\s*home|work\s*at\s*home|work[\s-]*at\b|any\s+available\s+work|home[\s-]*based|\bwfh\b",
+    re.IGNORECASE,
+)
+_SETUP_ONLY = {
+    "onsite", "on-site", "on site", "hybrid", "wfh",
+    "home based", "home-based", "work from home", "work at home",
+}
+_SETUP_NOISE = {"set", "up", "setup", "available", "any", "the", "and", "or"}
+_FIRST_KEYS = ["first name", "referral first name", "given name", "first", "personal details"]
+_LAST_KEYS = ["last name", "referral last name", "surname", "last"]
+_FULL_KEYS = ["full name", "candidate name", "applicant name", "your complete name"]
+
+
+def clean_person_name(value: str) -> str:
+    """Keep a person's name. Drop a work-setup answer such as Work From Home."""
+    text = " ".join(str(value or "").replace("\n", " ").split())
+    if not text:
+        return ""
+    if text.lower().strip(" ./-") in _SETUP_ONLY:
+        return ""
+    if not _WORK_SETUP_RE.search(text):
+        return text
+    remainder = _WORK_SETUP_RE.sub(" ", text)
+    remainder = re.sub(r"[/|]+", " ", remainder)
+    words = []
+    for word in remainder.split():
+        token = word.strip(" -.,")
+        if token and token.lower() not in _SETUP_NOISE:
+            words.append(token)
+    return " ".join(words)
+
+
+def _row_value(row: dict, choices: list[str]) -> str:
+    normalized = {}
+    for key, value in row.items():
+        name = " ".join(str(key or "").replace("\n", " ").split()).lower().rstrip(":").strip()
+        if name and name not in normalized:
+            normalized[name] = value
+    for choice in choices:
+        value = normalized.get(choice)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def applicant_names(row: dict) -> tuple[str, str]:
+    """Applicant first and last name. Never a work setup or a reference name."""
+    first = clean_person_name(_row_value(row, _FIRST_KEYS))
+    last = clean_person_name(_row_value(row, _LAST_KEYS))
+    if first and last:
+        return first, last
+    full = clean_person_name(_row_value(row, _FULL_KEYS))
+    bits = full.split()
+    if len(bits) >= 2:
+        first = first or " ".join(bits[:-1])
+        last = last or bits[-1]
+    return first, last
+
+
 def extract_candidates(read_plan: bool = False):
     client = get_client()
     ledger = load_ledger()
@@ -135,15 +199,7 @@ def extract_candidates(read_plan: bool = False):
                     if cnx_value:
                         continue
 
-                    # Flexible column mapping
-                    first = str(
-                        row.get("First Name") or row.get("first_name") or
-                        row.get("First") or row.get("Given Name") or ""
-                    ).strip()
-                    last = str(
-                        row.get("Last Name") or row.get("last_name") or
-                        row.get("Last") or row.get("Surname") or ""
-                    ).strip()
+                    first, last = applicant_names(row)
                     email = clean_email(
                         row.get("Email") or row.get("email") or row.get("Email Address") or ""
                     )
