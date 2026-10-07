@@ -389,6 +389,9 @@ def remark_for(status: int, body: str) -> str:
     text = body.lower()
     if status in (200, 201) and "error" not in text:
         return "EXECUTIVE TEAM"
+    # Portal saved the candidate and flagged Talkpush confirmation for review.
+    if status == 202 and ("submission saved" in text or "candidateid" in text):
+        return "EXECUTIVE TEAM"
     if "already submitted" in text or "same_agency" in text:
         return "Under EDWD"
     if "already in the system" in text or "blockkind\":\"crm" in text or '"crm"' in text:
