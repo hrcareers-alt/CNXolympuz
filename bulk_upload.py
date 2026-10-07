@@ -433,8 +433,31 @@ def load_logged_remarks() -> dict[tuple[str, str, int], str]:
     return found
 
 
+def name_problem(item: dict) -> str:
+    """Return why this name must not be posted. Empty string means the name is safe."""
+    first = clean_person_name(item.get("first_name", ""))
+    last = clean_person_name(item.get("last_name", ""))
+    raw = f"{item.get('first_name', '')} {item.get('last_name', '')}"
+    if not first or not last:
+        return "missing name"
+    if first != item.get("first_name") or last != item.get("last_name"):
+        return "work-setup text in name"
+    if WORK_SETUP_RE.search(raw):
+        return "work-setup text in name"
+    return ""
+
+
 def upload_all(items: list[dict], limit: int | None):
     ready = [item for item in items if item["status"] == "READY"]
+    blocked = [item for item in ready if name_problem(item)]
+    if blocked:
+        print(f"REFUSING UPLOAD {len(blocked)} names are still work-setup text", flush=True)
+        for item in blocked[:30]:
+            print(
+                f"  {item['tab']} r{item['row']} {item.get('first_name')!r} {item.get('last_name')!r} {item.get('email')}",
+                flush=True,
+            )
+        raise SystemExit(2)
     invalid = [item for item in items if item["status"] == "INVALID"]
     if limit is not None:
         ready = ready[:limit]
@@ -464,7 +487,9 @@ def upload_all(items: list[dict], limit: int | None):
             stats[remark] += 1
             log.write(json.dumps({
                 "sheet_id": item["sheet_id"], "row": item["row"], "tab": item["tab"],
-                "email": item["email"], "campaign": item.get("campaign", ""),
+                "email": item["email"], "first_name": item.get("first_name", ""),
+                "last_name": item.get("last_name", ""),
+                "campaign": item.get("campaign", ""),
                 "location": item.get("location", ""), "remark": remark,
             }) + "\n")
             log.flush()
@@ -577,6 +602,10 @@ def main():
         if wah <= 25:
             print(f"  {item['tab']} r{item['row']} | {item['location'][:140]}")
     print("WAH_TOTAL", wah)
+    bad_names = [item for item in items if item["status"] == "READY" and name_problem(item)]
+    print("BAD_NAMES", len(bad_names))
+    for item in bad_names[:20]:
+        print(f"  BAD {item['tab']} r{item['row']} {item.get('first_name')!r} {item.get('last_name')!r}")
     if mode == "plan":
         Path("/tmp/cnx-check/plan-items.json").write_text(json.dumps(items), encoding="utf-8")
         return
