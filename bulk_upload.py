@@ -9,8 +9,11 @@ import os
 import re
 import sys
 import time
+import uuid
 from collections import Counter
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from playwright.sync_api import sync_playwright
 
@@ -18,6 +21,9 @@ from extract import SHEET_IDS, clean_email, get_client, normalize_phone
 
 PORTAL = "https://agencyportaltalkpush.replit.app/candidates"
 LOGIN_EMAIL = "nickisabelo@olympuz-org.com"
+MANILA = ZoneInfo("Asia/Manila")
+LOCK_TAB = "CNX RUN"
+LOCK_HOURS = 2
 RESULT_PATH = Path("/tmp/cnx-check/bulk-results.jsonl")
 
 # (campaign value sent to the portal, campaign id, keywords). Longer keywords win.
@@ -576,9 +582,75 @@ def upload_all(items: list[dict], limit: int | None):
     print("STATS", dict(stats), flush=True)
 
 
+def in_upload_window(now: datetime | None = None) -> bool:
+    """True from 8:00 AM through 1:59 AM Philippine time. Quiet hours are 2:00–7:59 AM."""
+    current = now or datetime.now(MANILA)
+    return current.hour >= 8 or current.hour <= 1
+
+
+def acquire_run_lock(client):
+    """One upload at a time. A lock older than two hours is treated as abandoned."""
+    from gspread.exceptions import WorksheetNotFound
+
+    spreadsheet = client.open_by_key(SHEET_IDS[0])
+    try:
+        worksheet = spreadsheet.worksheet(LOCK_TAB)
+    except WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(title=LOCK_TAB, rows=5, cols=2)
+        worksheet.update(values=[["Hourly upload lock. Leave this cell alone."]], range_name="B1")
+    current = (worksheet.acell("A1").value or "").strip()
+    now = datetime.now(timezone.utc)
+    if current.startswith("running|"):
+        started = None
+        parts = current.split("|")
+        if len(parts) >= 2:
+            try:
+                started = datetime.fromisoformat(parts[1])
+            except ValueError:
+                started = None
+        if started is not None and started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        if started is not None and now - started < timedelta(hours=LOCK_HOURS):
+            print(f"Another CNX run is in progress since {parts[1]}. Skipping.", flush=True)
+            return None
+        print(f"Replacing stale lock from {current}", flush=True)
+    token = f"running|{now.isoformat()}|{uuid.uuid4()}"
+    worksheet.update(values=[[token]], range_name="A1")
+    time.sleep(1)
+    if (worksheet.acell("A1").value or "").strip() != token:
+        print("Another CNX run took the lock. Skipping.", flush=True)
+        return None
+    print("LOCK ACQUIRED", flush=True)
+    return {"worksheet": worksheet, "token": token}
+
+
+def release_run_lock(lock) -> None:
+    if not lock:
+        return
+    worksheet = lock["worksheet"]
+    if (worksheet.acell("A1").value or "").strip() == lock["token"]:
+        worksheet.update(values=[[""]], range_name="A1")
+        print("LOCK RELEASED", flush=True)
+
+
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "plan"
+    if mode == "upload" and os.getenv("CNX_FORCE") != "1" and not in_upload_window():
+        print("Outside 8:00 AM–1:00 AM Philippine time. Skipping.", flush=True)
+        return
     client = get_client()
+    lock = None
+    if mode == "upload":
+        lock = acquire_run_lock(client)
+        if lock is None:
+            return
+    try:
+        _run(mode, client)
+    finally:
+        release_run_lock(lock)
+
+
+def _run(mode: str, client):
     items = extract_backlog(client)
     counts = Counter(item["status"] for item in items)
     campaigns = Counter(item.get("campaign", "") for item in items if item["status"] == "READY")
