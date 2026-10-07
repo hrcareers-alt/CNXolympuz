@@ -101,6 +101,9 @@ def clean_email(email: str) -> str:
     email = email.replace("gamil.com", "gmail.com")
     email = email.replace("g,ail.com", "gmail.com")
     email = email.replace(" ", "")
+    if "/" in email:
+        parts = [part for part in email.split("/") if "@" in part]
+        email = parts[0] if parts else email.split("/")[0]
     return email
 
 

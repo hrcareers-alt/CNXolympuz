@@ -62,7 +62,7 @@ SITES = [
     ]),
     ("2026 Bridgetowne Campaign", "522", [
         "bridgetowne", "pasig", "ugong", "rosario pasig", "manggahan",
-        "santolan", "cainta", "taytay", "angono", "binangonan",
+        "santolan", "san andres cainta", "cainta", "taytay", "angono", "binangonan",
     ]),
     ("2026 Shaw Campaign", "549", [
         "shaw", "mandaluyong", "san juan", "greenhills", "addition hills",
@@ -75,7 +75,7 @@ SITES = [
         "ayala north", "north exchange", "ane",
     ]),
     ("2026 Makati G5 Campaign", "542", [
-        "makati", "poblacion", "bel-air", "bel air", "salcedo", "legazpi village",
+        "makati", "bel-air", "bel air", "salcedo", "legazpi village",
         "rockwell",
     ]),
     ("2026 Taguig Campaign", "551", [
