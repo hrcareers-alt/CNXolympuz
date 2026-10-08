@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
 from extract import SHEET_IDS, clean_email, get_client, normalize_phone
@@ -549,11 +550,20 @@ def upload_all(items: list[dict], limit: int | None):
             }
             response = None
             body = ""
-            for attempt in range(3):
-                response = context.request.post(
-                    PORTAL, data=payload, headers={"content-type": "application/json"}
-                )
-                body = response.text()
+            for attempt in range(4):
+                try:
+                    response = context.request.post(
+                        PORTAL, data=payload, headers={"content-type": "application/json"}, timeout=60000
+                    )
+                    body = response.text()
+                except PlaywrightError as exc:
+                    print(f"POST retry {attempt + 1} row={item['row']} {exc}", flush=True)
+                    time.sleep(5 * (attempt + 1))
+                    try:
+                        login()
+                    except PlaywrightError as login_exc:
+                        print(f"RELOGIN failed {login_exc}", flush=True)
+                    continue
                 html = "<html" in body.lower()
                 if response.status in (401, 403) or html:
                     print(f"RELOGIN status={response.status} row={item['row']}", flush=True)
