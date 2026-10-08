@@ -19,6 +19,7 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
 from extract import SHEET_IDS, clean_email, get_client, normalize_phone
+from ph_locations import nearest_site
 
 PORTAL = "https://agencyportaltalkpush.replit.app/candidates"
 LOGIN_EMAIL = "nickisabelo@olympuz-org.com"
@@ -27,142 +28,7 @@ LOCK_TAB = "CNX RUN"
 LOCK_HOURS = 2
 RESULT_PATH = Path("/tmp/cnx-check/bulk-results.jsonl")
 
-# (campaign value sent to the portal, campaign id, keywords). Longer keywords win.
-SITES = [
-    ("2026 San Lazaro Campaign", "548", [
-        "sampaloc", "quiapo", "santa cruz", "sta cruz", "tondo", "binondo",
-        "intramuros", "ermita", "malate", "paco", "pandacan", "santa ana",
-        "sta ana", "santa mesa", "sta mesa", "san andres", "san nicolas",
-        "manila city", "city of manila", "manila",
-    ]),
-    ("2026 Spark Campaign", "550", [
-        "cubao", "araneta", "socorro", "kamuning", "project 2", "project 3",
-        "project 4", "p tuazon", "p. tuazon", "10th avenue", "10th ave",
-    ]),
-    ("2026 Cyberwest Campaign", "534", [
-        "west avenue", "west ave", "sm north", "project 6", "project 7",
-        "project 8", "veterans", "bago bantay", "munoz", "muñoz", "balintawak",
-        "caloocan", "malabon", "navotas", "valenzuela",
-    ]),
-    ("2026 UP Ayala Technohub Campaign", "552", [
-        "commonwealth", "batasan", "fairview", "novaliches", "sauyo",
-        "up village", "up campus", "teachers village", "holy spirit",
-        "greater lagro", "north fairview", "rodriguez", "rodriquez",
-        "montalban", "san mateo",
-    ]),
-    ("2026 Eastwood Campaign", "537", [
-        "eastwood", "libis", "bagumbayan", "white plains", "blue ridge",
-        "katipunan", "loyola", "marikina", "antipolo", "project 4",
-        "teresa", "tanay", "morong", "pililla", "baras", "cardona",
-        "jalajala", "dalig",
-    ]),
-    ("2026 Eton Campaign", "523", [
-        "eton", "centris", "quezon avenue", "quezon ave", "south triangle",
-        "timog", "tomas morato", "scout", "sikatuna", "diliman", "quezon city",
-        " q.c", "qc",
-    ]),
-    ("2026 Bridgetowne Campaign", "522", [
-        "bridgetowne", "pasig", "ugong", "rosario pasig", "manggahan",
-        "santolan", "san andres cainta", "cainta", "taytay", "angono", "binangonan",
-    ]),
-    ("2026 Shaw Campaign", "549", [
-        "shaw", "mandaluyong", "san juan", "greenhills", "addition hills",
-        "wack wack", "wack-wack",
-    ]),
-    ("2026 Megamall Campaign", "543", [
-        "megamall", "ortigas", "kapitolyo",
-    ]),
-    ("2026 Makati ANE Campaign", "541", [
-        "ayala north", "north exchange", "ane",
-    ]),
-    ("2026 Makati G5 Campaign", "542", [
-        "makati", "bel-air", "bel air", "salcedo", "legazpi village",
-        "rockwell",
-    ]),
-    ("2026 Taguig Campaign", "551", [
-        "taguig", "bgc", "bonifacio", "fort bonifacio", "pateros", "mc kinley",
-        "mckinley",
-    ]),
-    ("2026 MOA Campaign", "544", [
-        "moa", "mall of asia", "pasay", "paranaque", "parañaque", "baclaran",
-        "don galo",
-    ]),
-    ("2026 Alabang Campaign", "525", [
-        "alabang", "muntinlupa", "las pinas", "las piñas", "sucat", "bf homes",
-        "pilar village",
-    ]),
-    ("2026 Nuvali Campaign", "547", [
-        "nuvali", "santa rosa", "sta rosa", "santa cruz laguna", "cabuyao", "calamba", "binan",
-        "biñan", "san pedro", "laguna", "los banos", "los baños", "dasmarinas",
-        "dasmariñas", "imus", "bacoor", "general trias", "gentri", "silang",
-        "tagaytay", "tanza", "kawit", "noveleta", "carmona", "cavite",
-        "batangas", "lipa", "tanauan", "lucena", "quezon province",
-        "trece martires", "trece", "amadeo", "indang", "naic", "sariaya",
-        "gumaca", "lucban", "candelaria", "tiaong", "mauban",
-        "atimonan", "malvar", "lemery", "nasugbu", "balayan", "calaca",
-        "real quezon", "lopez quezon", "talolong",
-    ]),
-    ("2026 Clark Campaign", "533", [
-        "clark", "pampanga", "angeles", "anges city", "mabalacat", "san fernando pampanga",
-        "tarlac", "olongapo", "zambales", "subic", "bataan", "balanga",
-        "nueva ecija", "cabanatuan", "gapan", "bulacan", "malolos", "meycauayan",
-        "marilao", "san jose del monte", "porac", "apalit", "macabebe",
-        "bocaue", "baliuag", "guiguinto", "plaridel", "baler", "dingalan",
-        "floridablanca", "guagua", "arayat", "magalang",
-    ]),
-    ("2026 Baguio Campaign", "565", [
-        "baguio", "benguet", "la trinidad", "la union", "san fernando la union",
-        "ilocos", "vigan", "laoag", "pangasinan", "dagupan", "urdaneta",
-        "ifugao", "kalinga", "abra", "mountain province", "cagayan", "tuguegarao",
-        "isabela", "santiago city", "nueva vizcaya", "penablanca", "agoo", "caba",
-    ]),
-    ("2026 Naga Campaign", "545", [
-        "naga", "camarines", "camrines", "albay", "legazpi", "legaspi", "sorsogon", "iriga",
-        "daet", "bicol", "masbate", "camalig", "ligao", "tabaco", "libmanan",
-        "magarao", "catanduanes", "virac",
-    ]),
-    ("2026 Cebu Mactan Campaign", "532", [
-        "lapu-lapu", "lapu lapu", "mactan",
-    ]),
-    ("2026 Cebu J Center Campaign", "529", [
-        "mandaue", "j center", "jcentre", "j centre",
-    ]),
-    ("2026 Cebu IT Park Campaign", "528", [
-        "cebu", "talisay", "consolacion", "liloan", "danao", "toledo", "bogo",
-        "carcar", "bohol", "tagbilaran", "tacloban", "leyte", "samar", "ormoc",
-        "maasin", "palo", "eastern visayas", "villareal",
-    ]),
-    ("2026 Bacolod Campaign", "526", [
-        "bacolod", "negros", "talisay negros", "dumaguete", "silay", "kabankalan", "sagay",
-        "san carlos", "bago city", "himamaylan", "cadiz", "escalante", "sibulan",
-        "siquijor", "murcia",
-    ]),
-    ("2026 Ilo-Ilo Campaign", "539", [
-        "iloilo", "ilo-ilo", "ilonggo", "panay", "antique", "aklan", "capiz",
-        "kalibo", "boracay", "roxas city", "guimaras",
-    ]),
-    ("2026 CDO Campaign", "527", [
-        "cagayan de oro", "cagayab", "cdoc", "mis or", "cdo", "misamis", "bukidnon", "bukindon",
-        "iligan", "camiguin", "ozamiz", "zamboanga", "pagadian", "dipolog",
-        "butuan", "surigao", "agusan", "valencia city", "malaybalay",
-        "manolo fortich", "don carlos", "bislig", "mangagoy", "naawan",
-        "lanao", "dapitan", "cabadbaran", "bayugan", "tubod",
-    ]),
-    ("2026 Davao Campaign", "535", [
-        "davao", "general santos", "gensan", "cotabato", "kidapawan", "tagum",
-        "panabo", "mati", "digos", "koronadal", "midsayap", "glan", "alabel",
-        "sarangani", "polomolok", "isulan", "sultan kudarat", "maguindanao",
-    ]),
-    ("2026 Work At Home Campaign | BM NORTH", "554", [
-        "bm north", "wah north", "work at home north",
-    ]),
-    ("2026 Work At Home Campaign | BM SOUTH", "555", [
-        "bm south", "wah south", "work at home south",
-    ]),
-    ("2026 Work At Home Campaign", "553", [
-        "work at home", "work-at-home", "wfh", "home based", "home-based",
-    ]),
-]
+# Campaigns come from ph_locations, using the PSGC province, city, and barangay lists.
 
 EMAIL_HEADERS = ["email", "email address", "referral email address"]
 PHONE_HEADERS = [
@@ -232,17 +98,6 @@ def col_letter(n: int) -> str:
     return letters
 
 
-# Province or whole-city defaults. A barangay or host city beats these.
-REGION_KEYWORDS = {
-    "quezon city", "qc", "manila", "metro manila", "ncr", "philippines", "ph",
-    "cebu", "negros", "laguna", "cavite", "batangas", "quezon province",
-    "pampanga", "bulacan", "nueva ecija", "tarlac", "zambales", "bataan",
-    "davao", "iloilo", "panay", "misamis", "bukidnon", "pangasinan", "ilocos",
-    "bicol", "camarines", "albay", "leyte", "samar", "bohol", "agusan",
-    "surigao", "zamboanga", "cotabato", "benguet",
-}
-
-
 def norm_location(value: str) -> str:
     text = str(value or "").lower().replace("ñ", "n").replace("\u5e3d", "n").replace("ã±", "n")
     for char in ",./()-":
@@ -261,23 +116,6 @@ def clearly_non_ph(location: str) -> bool:
     """Match country names as whole words so Agusan, Bukidnon, and Jerusalem stay Philippine."""
     padded = f" {norm_location(location)} "
     return any(f" {norm_location(word)} " in padded for word in NON_PH_WORDS)
-
-
-def nearest_site(location: str) -> tuple[str, str]:
-    """A specific city or barangay beats a province. Longest keyword wins inside a tier."""
-    padded = f" {norm_location(location)} "
-    matches = []
-    for campaign, campaign_id, keywords in SITES:
-        for keyword in keywords:
-            token = norm_location(keyword)
-            if token and f" {token} " in padded:
-                matches.append((len(token), campaign, campaign_id, token))
-    anchors = [item for item in matches if item[3] not in REGION_KEYWORDS]
-    pool = anchors or matches
-    if not pool:
-        return "2026 Work At Home Campaign", "553"
-    pool.sort(key=lambda item: item[0], reverse=True)
-    return pool[0][1], pool[0][2]
 
 
 def cell(row: list[str], index: int | None) -> str:
