@@ -321,11 +321,20 @@ def upload_all(items: list[dict], limit: int | None):
         page = context.new_page()
 
         def login():
-            page.goto("https://agencyportaltalkpush.replit.app/login", wait_until="domcontentloaded", timeout=60000)
-            page.fill('input[type="email"]', LOGIN_EMAIL)
-            page.fill('input[type="password"]', os.environ["TALKPUSH_PASSWORD"])
-            page.click('button[type="submit"]')
-            page.wait_for_url("**/candidates", timeout=30000)
+            last_error = None
+            for attempt in range(4):
+                try:
+                    page.goto("https://agencyportaltalkpush.replit.app/login", wait_until="domcontentloaded", timeout=60000)
+                    page.fill('input[type="email"]', LOGIN_EMAIL)
+                    page.fill('input[type="password"]', os.environ["TALKPUSH_PASSWORD"])
+                    page.click('button[type="submit"]', timeout=60000)
+                    page.wait_for_url("**/candidates", timeout=60000)
+                    return
+                except PlaywrightError as exc:
+                    last_error = exc
+                    print(f"LOGIN retry {attempt + 1} {exc}", flush=True)
+                    time.sleep(5 * (attempt + 1))
+            raise last_error
 
         login()
 
