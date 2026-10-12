@@ -68,6 +68,9 @@ class PhilippineSites(unittest.TestCase):
         self.assertEqual(site("Anges City"), "2026 Clark Campaign")
         self.assertEqual(site("Talisay City, Negros Occidental"), "2026 Bacolod Campaign")
         self.assertEqual(site("Sta. Cruz, Laguna"), "2026 Nuvali Campaign")
+        self.assertEqual(site("Tambo, Samal, Davao del Norte"), "2026 Davao Campaign")
+        self.assertEqual(site("Samal, Bataan"), "2026 Clark Campaign")
+        self.assertEqual(site("Island Garden City of Samal"), "2026 Davao Campaign")
 
     def test_provinces_and_known_cities(self):
         cases = {

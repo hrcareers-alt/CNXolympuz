@@ -306,6 +306,9 @@ def _index() -> dict:
     }
     barangay_entries = sorted(unique_barangay.items(), key=lambda item: len(item[0]), reverse=True)
     by_code = {city.code: city for city in cities}
+    official_by_prov: dict[str, list[str]] = {}
+    for row in _read_csv("municipalities.csv"):
+        official_by_prov.setdefault(row["provCode"], []).append(norm_location(row["citymunDesc"]))
     return {
         "unique_keys": unique_keys,
         "province_keys": province_key_set,
@@ -313,6 +316,7 @@ def _index() -> dict:
         "provinces": province_entries,
         "barangays": barangay_entries,
         "by_code": by_code,
+        "official_by_prov": official_by_prov,
     }
 
 
@@ -467,6 +471,16 @@ def nearest_site(location: str) -> tuple[str, str]:
                 if item[1].prov_code not in province_codes and item[0] not in in_keys
             ]
             city_hits = in_province + named_outside
+        else:
+            # "Samal, Davao del Norte" is the Island Garden City of Samal, not Samal, Bataan.
+            # Drop that other town when its name is only the short form of a city in the named province.
+            official = []
+            for code in province_codes:
+                official.extend(index["official_by_prov"].get(code, []))
+            def spelled_in_province(key: str) -> bool:
+                return any(key == name or f" {key} " in f" {name} " for name in official)
+            if city_hits and all(spelled_in_province(key) for key, _city in city_hits):
+                city_hits = []
 
     chosen = None
     site = None

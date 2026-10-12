@@ -109,6 +109,7 @@ NON_PH_WORDS = [
     "india", "usa", "united states", "china", "singapore", "malaysia",
     "dubai", "uae", "canada", "australia", "united kingdom", "uk",
     "japan", "korea", "vietnam", "thailand", "indonesia", "hong kong",
+    "liberia",
 ]
 
 
