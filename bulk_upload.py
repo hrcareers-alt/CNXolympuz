@@ -513,6 +513,9 @@ def _run(mode: str, client):
     counts = Counter(item["status"] for item in items)
     campaigns = Counter(item.get("campaign", "") for item in items if item["status"] == "READY")
     print("COUNTS", dict(counts))
+    print("TABS")
+    for tab, count in Counter(item["tab"] for item in items if item["status"] == "READY").most_common():
+        print(f"  {count:5} {tab}")
     print("CAMPAIGNS")
     for name, count in campaigns.most_common():
         print(f"  {count:5} {name}")

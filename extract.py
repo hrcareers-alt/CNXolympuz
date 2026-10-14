@@ -19,8 +19,9 @@ load_dotenv()
 # =========================================================
 # CONFIG
 # =========================================================
+# Every worksheet with a CNX column is uploaded, including MYNIMO on the earn sheet.
 SHEET_IDS = [
-    "1NoRX955F0dpxMReiC-6lcd3hgxFDccS3H9hzabTQghE",  # Apply or Refer & EARN
+    "1NoRX955F0dpxMReiC-6lcd3hgxFDccS3H9hzabTQghE",  # Apply or Refer & EARN (includes MYNIMO)
     "12B9N-5AGpWBT8R1ePXBZIwnFmBC7MadIPo5NESUbAuw",  # DIRECT SOURCING TRACTION
     "1PYPebwsRPiO8y7ogsMegRpSFmR3E84gGPnJohcjm04o",  # Apply For A Job Across All Partners
 ]
