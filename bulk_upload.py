@@ -247,6 +247,31 @@ def remark_for(status: int, body: str) -> str:
     return ""
 
 
+_SHEETS: dict[str, object] = {}
+
+
+def sheets_call(action, label: str):
+    """Retry a Sheets call when the per-minute read quota is exhausted."""
+    for attempt in range(6):
+        try:
+            return action()
+        except Exception as exc:
+            if "429" not in str(exc) or attempt == 5:
+                raise
+            wait = 20 * (attempt + 1)
+            print(f"QUOTA wait {wait}s {label}", flush=True)
+            time.sleep(wait)
+
+
+def spreadsheet_for(client, sheet_id: str):
+    cached = _SHEETS.get(sheet_id)
+    if cached is not None:
+        return cached
+    sheet = sheets_call(lambda: client.open_by_key(sheet_id), sheet_id[:8])
+    _SHEETS[sheet_id] = sheet
+    return sheet
+
+
 def flush_remarks(client, pending: list[dict]):
     if not pending:
         return
@@ -254,13 +279,13 @@ def flush_remarks(client, pending: list[dict]):
     for item in pending:
         grouped.setdefault((item["sheet_id"], item["tab"]), []).append(item)
     for (sheet_id, tab), rows in grouped.items():
-        spreadsheet = client.open_by_key(sheet_id)
+        spreadsheet = spreadsheet_for(client, sheet_id)
         worksheet = spreadsheet.worksheet(tab)
         data = []
         for item in rows:
             letter = col_letter(item["cnx_col"])
             data.append({"range": f"{letter}{item['row']}", "values": [[item["remark"]]]})
-        worksheet.batch_update(data, value_input_option="RAW")
+        sheets_call(lambda: worksheet.batch_update(data, value_input_option="RAW"), tab)
         print(f"WROTE {len(data)} remarks on {tab}", flush=True)
     pending.clear()
 
@@ -450,7 +475,7 @@ def acquire_run_lock(client):
     """One upload at a time. A lock older than two hours is treated as abandoned."""
     from gspread.exceptions import WorksheetNotFound
 
-    spreadsheet = client.open_by_key(SHEET_IDS[0])
+    spreadsheet = spreadsheet_for(client, SHEET_IDS[0])
     try:
         worksheet = spreadsheet.worksheet(LOCK_TAB)
     except WorksheetNotFound:
