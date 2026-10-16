@@ -163,21 +163,11 @@ def applicant_names(headers: list[str], row: list[str]) -> tuple[str, str]:
 def extract_backlog(client):
     items = []
     for sheet_id in SHEET_IDS:
-        spreadsheet = client.open_by_key(sheet_id)
-        meta = spreadsheet.fetch_sheet_metadata()
+        spreadsheet = spreadsheet_for(client, sheet_id)
+        meta = sheets_call(lambda: spreadsheet.fetch_sheet_metadata(), sheet_id[:8])
         titles = [sheet["properties"]["title"] for sheet in meta["sheets"]]
         ranges = [f"'{title}'!A:AZ" for title in titles]
-        batch = None
-        for attempt in range(6):
-            try:
-                batch = spreadsheet.values_batch_get(ranges)
-                break
-            except Exception as exc:
-                if "429" not in str(exc) or attempt == 5:
-                    raise
-                wait = 20 * (attempt + 1)
-                print(f"QUOTA wait {wait}s", flush=True)
-                time.sleep(wait)
+        batch = sheets_call(lambda: spreadsheet.values_batch_get(ranges), sheet_id[:8])
         for value_range in batch.get("valueRanges", []):
             values = value_range.get("values") or []
             if not values:
@@ -248,18 +238,21 @@ def remark_for(status: int, body: str) -> str:
 
 
 _SHEETS: dict[str, object] = {}
+_WORKSHEETS: dict[tuple[str, str], object] = {}
 
 
 def sheets_call(action, label: str):
-    """Retry a Sheets call when the per-minute read quota is exhausted."""
+    """Retry a Sheets call when the quota is full or the connection drops."""
+    retryable = ("429", "500", "503", "RemoteDisconnected", "Connection aborted", "ConnectionError", "timed out")
     for attempt in range(6):
         try:
             return action()
         except Exception as exc:
-            if "429" not in str(exc) or attempt == 5:
+            text = str(exc)
+            if not any(token in text for token in retryable) or attempt == 5:
                 raise
             wait = 20 * (attempt + 1)
-            print(f"QUOTA wait {wait}s {label}", flush=True)
+            print(f"SHEETS wait {wait}s {label}", flush=True)
             time.sleep(wait)
 
 
@@ -279,8 +272,12 @@ def flush_remarks(client, pending: list[dict]):
     for item in pending:
         grouped.setdefault((item["sheet_id"], item["tab"]), []).append(item)
     for (sheet_id, tab), rows in grouped.items():
-        spreadsheet = spreadsheet_for(client, sheet_id)
-        worksheet = spreadsheet.worksheet(tab)
+        cached = _WORKSHEETS.get((sheet_id, tab))
+        if cached is None:
+            spreadsheet = spreadsheet_for(client, sheet_id)
+            cached = sheets_call(lambda: spreadsheet.worksheet(tab), tab)
+            _WORKSHEETS[(sheet_id, tab)] = cached
+        worksheet = cached
         data = []
         for item in rows:
             letter = col_letter(item["cnx_col"])
