@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/local.properties
+mobile/android/keystore.properties
+mobile/android/*.jks
+mobile/ios/build/
+mobile/ios/DerivedData/
