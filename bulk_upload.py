@@ -22,7 +22,8 @@ from extract import SHEET_IDS, clean_email, get_client, normalize_phone
 from ph_locations import nearest_site
 
 PORTAL = "https://agencyportaltalkpush.replit.app/candidates"
-LOGIN_EMAIL = "nickisabelo@olympuz-org.com"
+# Override the portal login with the TALKPUSH_EMAIL secret. The password is TALKPUSH_PASSWORD.
+LOGIN_EMAIL = (os.getenv("TALKPUSH_EMAIL") or "nickisabelo@olympuz-org.com").strip()
 MANILA = ZoneInfo("Asia/Manila")
 LOCK_TAB = "CNX RUN"
 LOCK_HOURS = 2
@@ -177,6 +178,7 @@ def extract_backlog(client):
                 continue
             cnx_idx = [h.strip() for h in headers].index("CNX")
             tab = value_range["range"].split("!")[0].strip("'")
+            print(f"CNX_TAB {spreadsheet.title} | {tab}", flush=True)
             email_i = header_index(headers, EMAIL_HEADERS, "email")
             phone_i = header_index(headers, PHONE_HEADERS) or header_index(headers, [], "mobile") or header_index(headers, [], "phone") or header_index(headers, [], "contact")
             loc_indexes = location_indexes(headers)
@@ -344,12 +346,16 @@ def upload_all(items: list[dict], limit: int | None):
         page = context.new_page()
 
         def login():
+            password = os.getenv("TALKPUSH_PASSWORD")
+            if not password:
+                raise SystemExit("TALKPUSH_PASSWORD is not set. Add it as a secret.")
+            print(f"LOGIN {LOGIN_EMAIL}", flush=True)
             last_error = None
             for attempt in range(4):
                 try:
                     page.goto("https://agencyportaltalkpush.replit.app/login", wait_until="domcontentloaded", timeout=60000)
                     page.fill('input[type="email"]', LOGIN_EMAIL)
-                    page.fill('input[type="password"]', os.environ["TALKPUSH_PASSWORD"])
+                    page.fill('input[type="password"]', password)
                     page.click('button[type="submit"]', timeout=60000)
                     page.wait_for_url("**/candidates", timeout=60000)
                     return
