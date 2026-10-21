@@ -19,11 +19,12 @@ load_dotenv()
 # =========================================================
 # CONFIG
 # =========================================================
-# Every worksheet with a CNX column is uploaded, including MYNIMO on the earn sheet.
+# Every worksheet with a CNX column on these workbooks is uploaded.
 SHEET_IDS = [
     "1NoRX955F0dpxMReiC-6lcd3hgxFDccS3H9hzabTQghE",  # Apply or Refer & EARN (includes MYNIMO)
-    "12B9N-5AGpWBT8R1ePXBZIwnFmBC7MadIPo5NESUbAuw",  # DIRECT SOURCING TRACTION
+    "12B9N-5AGpWBT8R1ePXBZIwnFmBC7MadIPo5NESUbAuw",  # DIRECT SOURCING TRACTION - EXPENSE
     "1PYPebwsRPiO8y7ogsMegRpSFmR3E84gGPnJohcjm04o",  # Apply For A Job Across All Partners
+    "1VCTneWcGi78Ce2hQGhYOnB2lUK8Pj5sYCNN30Cr9vqU",  # WEBSITE APPLICANTS
 ]
 
 LEDGER_FILE = Path("uploaded.json")
