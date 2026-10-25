@@ -267,6 +267,36 @@ def spreadsheet_for(client, sheet_id: str):
     return sheet
 
 
+def batch_write(worksheet, data: list[dict]):
+    """Write cells, and put the original A1 ranges back if the request fails.
+
+    gspread prefixes the tab name onto each range before the request. A retry
+    has to start from the plain range or the next request is not a valid cell.
+    """
+    originals = [item["range"] for item in data]
+    try:
+        return worksheet.batch_update(data, value_input_option="RAW")
+    except Exception:
+        for item, original in zip(data, originals):
+            item["range"] = original
+        raise
+
+
+def live_sheet_title(worksheet) -> str:
+    """Read the tab title from its sheet id. A rename keeps the same id."""
+    meta = sheets_call(
+        lambda: worksheet.spreadsheet.fetch_sheet_metadata(),
+        f"title {worksheet.id}",
+    )
+    for sheet in meta.get("sheets", []):
+        props = sheet.get("properties") or {}
+        if props.get("sheetId") == worksheet.id:
+            title = props.get("title") or worksheet.title
+            worksheet._properties["title"] = title
+            return title
+    return worksheet.title
+
+
 def flush_remarks(client, pending: list[dict]):
     if not pending:
         return
@@ -280,19 +310,34 @@ def flush_remarks(client, pending: list[dict]):
             cached = sheets_call(lambda: spreadsheet.worksheet(tab), tab)
             _WORKSHEETS[(sheet_id, tab)] = cached
         worksheet = cached
-        data = []
-        for item in rows:
-            letter = col_letter(item["cnx_col"])
-            data.append({"range": f"{letter}{item['row']}", "values": [[item["remark"]]]})
-        sheets_call(lambda: worksheet.batch_update(data, value_input_option="RAW"), tab)
-        print(f"WROTE {len(data)} remarks on {tab}", flush=True)
+        for attempt in range(2):
+            title = live_sheet_title(worksheet)
+            if title != tab:
+                print(f"TAB TITLE {tab!r} is now {title!r}", flush=True)
+            # Build a fresh range list each attempt. gspread rewrites range
+            # strings in place, so a retry must not start from the rewritten ones.
+            data = []
+            for item in rows:
+                letter = col_letter(item["cnx_col"])
+                data.append({"range": f"{letter}{item['row']}", "values": [[item["remark"]]]})
+            try:
+                sheets_call(lambda: batch_write(worksheet, data), title)
+                break
+            except Exception as exc:
+                if attempt == 0 and "Unable to parse range" in str(exc):
+                    print(f"RANGE retry {title!r} {exc}", flush=True)
+                    continue
+                raise
+        print(f"WROTE {len(rows)} remarks on {worksheet.title}", flush=True)
     pending.clear()
 
 
-def load_logged_remarks() -> dict[tuple[str, str, int], str]:
-    found = {}
+def load_logged_remarks() -> tuple[dict[tuple[str, str, int], str], dict[tuple[str, str, int], str]]:
+    """Return remarks keyed by tab, and by email, so a renamed tab still resumes."""
+    by_tab: dict[tuple[str, str, int], str] = {}
+    by_email: dict[tuple[str, str, int], str] = {}
     if not RESULT_PATH.exists():
-        return found
+        return by_tab, by_email
     for line in RESULT_PATH.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -301,9 +346,26 @@ def load_logged_remarks() -> dict[tuple[str, str, int], str]:
         except json.JSONDecodeError:
             continue
         remark = rec.get("remark") or ""
-        if remark and rec.get("sheet_id") and rec.get("tab") and rec.get("row"):
-            found[(rec["sheet_id"], rec["tab"], int(rec["row"]))] = remark
-    return found
+        if not remark or not rec.get("sheet_id") or not rec.get("row"):
+            continue
+        row = int(rec["row"])
+        if rec.get("tab"):
+            by_tab[(rec["sheet_id"], rec["tab"], row)] = remark
+        email = str(rec.get("email") or "").strip().lower()
+        if email:
+            by_email[(rec["sheet_id"], email, row)] = remark
+    return by_tab, by_email
+
+
+def logged_remark(by_tab: dict, by_email: dict, item: dict) -> str:
+    """Remark already stored for this row. Email matches when the tab was renamed."""
+    remark = by_tab.get((item["sheet_id"], item["tab"], item["row"]), "")
+    if remark:
+        return remark
+    email = str(item.get("email") or "").strip().lower()
+    if not email:
+        return ""
+    return by_email.get((item["sheet_id"], email, item["row"]), "")
 
 
 def name_problem(item: dict) -> str:
@@ -335,7 +397,7 @@ def upload_all(items: list[dict], limit: int | None):
     if limit is not None:
         ready = ready[:limit]
         invalid = []
-    already = load_logged_remarks()
+    by_tab, by_email = load_logged_remarks()
     client = get_client()
     pending = []
     stats = Counter()
@@ -390,16 +452,16 @@ def upload_all(items: list[dict], limit: int | None):
                 flush_remarks(client, pending)
 
         for item in invalid:
-            key = (item["sheet_id"], item["tab"], item["row"])
-            if key in already:
-                replay(item, already[key])
+            previous = logged_remark(by_tab, by_email, item)
+            if previous:
+                replay(item, previous)
                 continue
             queue(item, "INVALID")
 
         for index, item in enumerate(ready, start=1):
-            key = (item["sheet_id"], item["tab"], item["row"])
-            if key in already:
-                replay(item, already[key])
+            previous = logged_remark(by_tab, by_email, item)
+            if previous:
+                replay(item, previous)
                 continue
             first_name = clean_person_name(item["first_name"])
             last_name = clean_person_name(item["last_name"])
