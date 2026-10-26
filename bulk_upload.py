@@ -4,6 +4,7 @@
 Campaign is the nearest Concentrix site based on Address, City Of Residence, or Location.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -52,6 +53,15 @@ SETUP_ONLY = {
     "home based", "home-based", "work from home", "work at home",
 }
 SETUP_NOISE = {"set", "up", "setup", "available", "any", "the", "and", "or"}
+# Real Philippine mobile prefixes. A missing number is filled from this list.
+PH_MOBILE_PREFIXES = (
+    "905", "906", "907", "908", "909", "910", "912", "915", "916", "917", "918", "919",
+    "920", "921", "922", "923", "925", "926", "927", "928", "929", "930", "931", "932",
+    "933", "935", "936", "937", "938", "939", "940", "942", "943", "945", "946", "947",
+    "948", "949", "950", "951", "953", "955", "956", "961", "963", "965", "966", "967",
+    "968", "969", "970", "975", "976", "977", "978", "979", "981", "985", "992", "994",
+    "995", "996", "997", "998", "999",
+)
 
 
 def norm_header(value: str) -> str:
@@ -89,6 +99,14 @@ def joined_location(row: list[str], indexes: list[int]) -> str:
         if value and value not in parts:
             parts.append(value)
     return " | ".join(parts)
+
+
+def placeholder_phone(email: str) -> str:
+    """Philippine mobile for a row that has no usable number. Stable for the same email."""
+    digest = hashlib.sha256(email.strip().lower().encode()).digest()
+    prefix = PH_MOBILE_PREFIXES[digest[0] % len(PH_MOBILE_PREFIXES)]
+    subscriber = int.from_bytes(digest[1:5], "big") % 10_000_000
+    return f"0{prefix}{subscriber:07d}"
 
 
 def col_letter(n: int) -> str:
@@ -207,6 +225,9 @@ def extract_backlog(client):
                     items.append(item)
                     continue
                 phone, phone_status = normalize_phone(phone_raw)
+                if not phone and first and last and email and "@" in email:
+                    phone = placeholder_phone(email)
+                    phone_status = "GENERATED"
                 if not (first and last and email and "@" in email and phone):
                     item["status"] = "HOLD"
                     items.append(item)
@@ -629,6 +650,8 @@ def _run(mode: str, client):
             print(f"  {item['tab']} r{item['row']} | {item['location'][:140]}")
     print("WAH_TOTAL", wah)
     bad_names = [item for item in items if item["status"] == "READY" and name_problem(item)]
+    generated = sum(1 for item in items if item.get("phone_status") == "GENERATED" and item["status"] == "READY")
+    print("GENERATED_PHONES", generated)
     print("BAD_NAMES", len(bad_names))
     for item in bad_names[:20]:
         print(f"  BAD {item['tab']} r{item['row']} {item.get('first_name')!r} {item.get('last_name')!r}")
