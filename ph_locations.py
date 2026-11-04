@@ -4,6 +4,8 @@ Place names come from the PSGC lists in data/ph (province, municipality or city,
 and barangay). A city beats a province. A site landmark beats the city default
 only inside the city it belongs to. The same place name in two provinces is
 used only when the text names the province, or when every match is the same site.
+An address that names no single Philippine site goes to Bridgetowne. Explicit
+work-at-home text stays on the Work At Home campaigns.
 """
 
 from __future__ import annotations
@@ -418,15 +420,22 @@ def _landmark(padded: str, city_name: str | None, have_place: bool) -> tuple[str
 
 
 def nearest_site(location: str) -> tuple[str, str]:
-    """Return the Concentrix campaign name and id for a Philippine address."""
+    """Return the Concentrix campaign name and id for a Philippine address.
+
+    Blank text, N/A, Philippines only, a shared name on more than one site,
+    and any other address with no single PSGC site use Bridgetowne. Explicit
+    work-at-home text stays on the Work At Home campaigns.
+    """
     text = _prepare(location)
-    if text in EMPTY_LOCATIONS:
-        return WAH
     space = f" {text} "
     if " bm north " in space or " wah north " in space or " work at home north " in space:
         return WAH_NORTH
     if " bm south " in space or " wah south " in space or " work at home south " in space:
         return WAH_SOUTH
+    if " work at home " in space or " work from home " in space or " wah " in space:
+        return WAH
+    if text in EMPTY_LOCATIONS:
+        return BRIDGETOWNE
 
     index = _index()
     city_hits = _hits(text, index["cities"])
@@ -485,10 +494,8 @@ def nearest_site(location: str) -> tuple[str, str]:
     chosen = None
     site = None
     by_code: dict[str, _City] = {}
-    longest: dict[str, int] = {}
-    for key, city in city_hits:
+    for _key, city in city_hits:
         by_code[city.code] = city
-        longest[city.code] = max(longest.get(city.code, 0), len(key))
     province_name_codes = {key: province["code"] for key, province in province_hits}
     if len(province_codes) > 1 and len(by_code) > 1:
         cross = [
@@ -511,7 +518,6 @@ def nearest_site(location: str) -> tuple[str, str]:
         }
         if kept != by_code:
             by_code = kept
-            longest = {code: longest[code] for code in by_code}
     unique_codes = {
         city.code: city
         for key, city in city_hits
@@ -519,7 +525,6 @@ def nearest_site(location: str) -> tuple[str, str]:
     }
     if chosen is None and len(unique_codes) == 1 and len(by_code) > 1:
         by_code = unique_codes
-        longest = {code: longest.get(code, 0) for code in by_code}
     chartered = {code: city for code, city in by_code.items() if city.chartered}
     if chosen is None and len(chartered) == 1 and len(by_code) > 1:
         by_code = chartered
@@ -537,11 +542,7 @@ def nearest_site(location: str) -> tuple[str, str]:
         if len(sites) == 1:
             site = next(iter(sites))
         else:
-            best_len = max(longest.values())
-            best_codes = [code for code, length in longest.items() if length == best_len]
-            if len(best_codes) == 1:
-                chosen = by_code[best_codes[0]]
-                site = chosen.site
+            return BRIDGETOWNE
 
     if chosen is None and site is None and mentions_manila and not by_code:
         site = SAN_LAZARO
@@ -585,4 +586,4 @@ def nearest_site(location: str) -> tuple[str, str]:
     for phrase, region in REGIONS:
         if f" {phrase} " in padded:
             return region
-    return WAH
+    return BRIDGETOWNE

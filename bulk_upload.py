@@ -128,7 +128,7 @@ NON_PH_WORDS = [
     "india", "usa", "united states", "china", "singapore", "malaysia",
     "dubai", "uae", "canada", "australia", "united kingdom", "uk",
     "japan", "korea", "vietnam", "thailand", "indonesia", "hong kong",
-    "liberia", "nigeria", "afghanistan",
+    "liberia", "nigeria", "afghanistan", "houston", "kuala lumpur",
 ]
 
 
@@ -552,9 +552,9 @@ def upload_all(items: list[dict], limit: int | None):
 
 
 def in_upload_window(now: datetime | None = None) -> bool:
-    """True from 8:00 AM through 1:59 AM Philippine time. Quiet hours are 2:00–7:59 AM."""
+    """True from 8:00 AM through 3:59 AM Philippine time. Quiet hours are 4:00–7:59 AM."""
     current = now or datetime.now(MANILA)
-    return current.hour >= 8 or current.hour <= 1
+    return current.hour >= 8 or current.hour <= 3
 
 
 def acquire_run_lock(client):
@@ -605,7 +605,7 @@ def release_run_lock(lock) -> None:
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "plan"
     if mode == "upload" and os.getenv("CNX_FORCE") != "1" and not in_upload_window():
-        print("Outside 8:00 AM–1:00 AM Philippine time. Skipping.", flush=True)
+        print("Outside 8:00 AM–3:59 AM Philippine time. Skipping.", flush=True)
         return
     client = get_client()
     lock = None

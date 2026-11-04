@@ -1,15 +1,15 @@
 name: CNX hourly upload
 
-# GitHub schedules use UTC. 00:00 through 17:00 UTC is 8:00 AM through 1:00 AM
-# in Philippine time (Asia/Manila). The last run starts at 1:00 AM. No run is
-# scheduled from 2:00 AM through 7:00 AM.
+# GitHub schedules use UTC. 00:00 through 19:00 UTC is 8:00 AM through 3:00 AM
+# in Philippine time (Asia/Manila). The last run starts at 3:00 AM. No run is
+# scheduled from 4:00 AM through 7:00 AM.
 on:
   schedule:
-    - cron: "0 0-17 * * *"
+    - cron: "0 0-19 * * *"
   workflow_dispatch:
     inputs:
       force:
-        description: Run outside 8:00 AM–1:00 AM Philippine time
+        description: Run outside 8:00 AM–3:59 AM Philippine time
         type: boolean
         default: false
 
