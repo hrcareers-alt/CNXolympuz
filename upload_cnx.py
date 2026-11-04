@@ -22,7 +22,7 @@ load_dotenv()
 # CONFIG
 # =========================================================
 PORTAL_URL = "https://agencyportaltalkpush.replit.app/candidates"
-LOGIN_EMAIL = "nickisabelo@olympuz-org.com"
+LOGIN_EMAIL = (os.getenv("TALKPUSH_EMAIL") or "nickisabelo@olympuz-org.com").strip()
 PASSWORD = os.getenv("TALKPUSH_PASSWORD")
 
 LOCK_FILE = Path(".upload.lock")
