@@ -137,8 +137,15 @@ class PhilippineSites(unittest.TestCase):
 
     def test_foreign_locations_stay_invalid(self):
         # bulk_upload marks these INVALID before nearest_site, so they are not Bridgetowne.
-        for location in ("Nigeria", "India", "Dubai", "Houston", "Kuala Lumpur", "Japan"):
+        for location in ("Nigeria", "India", "Dubai", "Houston", "Kuala Lumpur", "Japan", "Korea"):
             self.assertTrue(clearly_non_ph(location), location)
+
+    def test_country_street_in_rizal_stays_philippine(self):
+        address = "Blk 19 Korea St. Bagong Pag-asa, Brgy. Sta. Ana, Westbank Rd, Taytay, Rizal"
+        self.assertFalse(clearly_non_ph(address))
+        self.assertEqual(nearest_site(address), ("2026 Bridgetowne Campaign", "522"))
+        self.assertFalse(clearly_non_ph("Lot7 Blk9 Singapore St., Sunshine Valley, Bacolod City"))
+        self.assertTrue(clearly_non_ph("Korea / Cebu"))
 
     def test_upload_window_runs_through_3am(self):
         def at(hour):

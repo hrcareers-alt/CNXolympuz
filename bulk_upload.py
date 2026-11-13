@@ -132,9 +132,25 @@ NON_PH_WORDS = [
 ]
 
 
+# Country names used as subdivision streets: Korea St, USA Street, Japan St.
+STREET_SUFFIXES = {"st", "street", "ave", "avenue", "rd", "road", "blvd", "boulevard", "dr", "drive"}
+
+
 def clearly_non_ph(location: str) -> bool:
-    """Match country names as whole words so Agusan, Bukidnon, and Jerusalem stay Philippine."""
-    padded = f" {norm_location(location)} "
+    """Match country names as whole words so Agusan, Bukidnon, and Jerusalem stay Philippine.
+
+    A country word that names a street, such as Korea St in Taytay, Rizal, stays Philippine.
+    """
+    tokens = norm_location(location).split()
+    kept = []
+    index = 0
+    while index < len(tokens):
+        if index + 1 < len(tokens) and tokens[index + 1] in STREET_SUFFIXES:
+            index += 2
+            continue
+        kept.append(tokens[index])
+        index += 1
+    padded = f" {' '.join(kept)} "
     return any(f" {norm_location(word)} " in padded for word in NON_PH_WORDS)
 
 
